@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  broker:
+    image: redis:8
+    restart: unless-stopped
+    volumes:
+      - /volume2/docker/paperless/redisdata:/data
+    networks:
+      - allowed-internet
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - /volume2/docker/paperless/pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: paperless
+    networks:
+      - allowed-internet
+
+  gotenberg:
+    image: gotenberg/gotenberg:8.22
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+    networks:
+      - allowed-internet
+
+  tika:
+    image: apache/tika:latest
+    restart: unless-stopped
+    networks:
+      - allowed-internet
+
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+      - broker
+      - gotenberg
+      - tika
+    ports:
+      - "8000:8000"
+    volumes:
+      # Document storage on HDD
+      - /volume1/AppData/PaperlessFolders/paperless-media:/usr/src/paperless/media
+      - /volume1/AppData/PaperlessFolders/paperless-data:/usr/src/paperless/data
+      - /volume1/AppData/PaperlessFolders/paperless-export:/usr/src/paperless/export
+
+      # Document consumption
+      - /volume1/FamilyData/PaperlessInbox:/usr/src/paperless/consume
+
+    environment:
+      USERMAP_UID: 1000
+      USERMAP_GID: 10
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+
+      PAPERLESS_CONSUMER_RECURSIVE: true
+      PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS: true
+      PAPERLESS_CONSUMER_POLLING: 10
+      PAPERLESS_CONSUMER_DELETE_DUPLICATES: true
+
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_TIME_ZONE: Asia/Singapore
+      PAPERLESS_SECRET_KEY: SUPERSECRETKEYHERE
+
+      # Custom filename format
+      PAPERLESS_FILENAME_FORMAT: >-
+        {% set family = ['User1','User2','User3','User4','User5','Family'] %}
+        {% set person = (tag_name_list | select('in', family) | list | first) %}
+        {% set rest = (tag_name_list | reject('equalto', person) | list | sort) %}
+        {{ person | default("Unsorted") }}/{{ created_year }}{% if rest %}/{{ rest | join('_') }}{% endif %}/{{ original_name }}
+
+    networks:
+      - allowed-internet
+
+networks:
+  allowed-internet:
+    external: true
