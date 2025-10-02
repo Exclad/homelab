@@ -1,0 +1,26 @@
+services:
+  syncthing:
+    image: linuxserver/syncthing:latest
+    container_name: syncthing
+    hostname: ugreen-nas # This is the friendly name your devices will see
+    environment:
+      - PUID=1000               ### CHANGE to your user's PUID ###
+      - PGID=10                ### CHANGE to your user's PGID ###
+      - TZ=Asia/Singapore       # Timezone for your country
+    volumes:
+      - /volume2/docker/syncthing:/config  ### CHANGE /volume2 if your SSD is different ###
+
+      # This maps your actual data into the HDD array
+      - /volume1/FamilyData:/data          ### CHANGE /volume1 if your HDD is different ###
+    ports:
+      - 8384:8384      # Web UI for you to access
+      - 22000:22000/tcp  # For file transfers
+      - 22000:22000/udp  # For file transfers
+      - 21027:21027/udp  # For device discovery
+    restart: unless-stopped
+    # Everything below is optional. I created a network to keep my docker stuff "organized"
+    networks:
+      - allowed-internet
+networks:
+  allowed-internet:
+    external: true
